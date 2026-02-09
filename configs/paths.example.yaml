@@ -1,0 +1,12 @@
+data_root: /ihome/jbwang/liy121/fintune/data
+raw_tiles_dir: ${data_root}/rosmap
+brain_data_dir: ${data_root}/brain_data
+splits_dir: ${data_root}/splits  # donor-level split metadata will be saved here
+cellpose_train_dir: ${data_root}/cellpose/train_cells
+cellpose_val_dir: ${data_root}/cellpose/val_cells
+cellpose_test_dir: ${data_root}/cellpose/test_cells
+predictions_dir: ${data_root}/predictions
+checkpoints_dir: ${data_root}/checkpoints
+logs_dir: ${data_root}/logs
+downstream_dir: ${data_root}/downstream
+reports_dir: ${data_root}/reports

@@ -1,0 +1,50 @@
+# Python cache / bytecode
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual envs / conda envs
+.venv/
+venv/
+env/.venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs / runtime
+*.log
+logs/
+
+# Project outputs (large or generated)
+data/
+reports/
+
+# SLURM outputs
+slurm-*.out
+slurm-*.err
+data/logs/slurm/
+
+# Model artifacts / predictions / checkpoints
+checkpoints/
+predictions/
+*.pt
+*.pth
+
+# Keep template config, ignore local absolute-path config
+configs/paths.yaml
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+
+# Misc
+*.tmp
+*.swp

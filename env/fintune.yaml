@@ -1,0 +1,32 @@
+name: fintune
+channels:
+  - conda-forge
+  - nvidia
+  - pytorch
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch=2.2
+  - torchvision=0.17
+  - pytorch-cuda=11.8  # adjust to your GPU driver; replace with cpuonly if no CUDA
+  - cudatoolkit=11.8
+  - jupyterlab
+  - numpy
+  - pandas
+  - scikit-image
+  - scikit-learn
+  - tifffile
+  - imageio
+  - seaborn
+  - matplotlib
+  - tqdm
+  - ipywidgets
+  - openslide
+  - statsmodels
+  - pip:
+      - cellpose>=4.6
+      - micro-sam>=0.0.8
+      - segment-anything
+      - torchmetrics
+      - albumentations
+      - hydra-core
