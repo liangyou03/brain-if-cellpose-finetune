@@ -14,9 +14,11 @@ export PYTHONPATH=src
 
 mamba run -n finetune python scripts/train_finetune_generic.py \
   --config configs/paths.yaml \
-  --epochs 8 \
+  --epochs 80 \
   --lr 1e-4 \
   --batch 2 \
+  --nimg-per-epoch 72 \
+  --nimg-test-per-epoch 24 \
   --model-name marker_only_cpsam \
   --zero-dapi
 

@@ -13,36 +13,13 @@ cd /ix/jbwang/liangyou/fintune
 
 export PYTHONPATH=src
 
-run_if_missing () {
-  local out_file="$1"
-  shift
-  if [ -f "$out_file" ]; then
-    echo "[skip] exists: $out_file"
-  else
-    mamba run -n finetune python scripts/run_gating_ablation.py "$@"
-  fi
-}
-
-run_if_missing \
-  data/reports/e3_gating_generic_cpsam_test_q0_100_a50.tsv \
-  --config configs/paths.yaml \
-  --model generic_cpsam \
-  --split test \
-  --intensity_thresh 0.0 1.0 \
-  --min_area 50
-
-run_if_missing \
-  data/reports/e3_gating_generic_cpsam_test_q5_95_a80.tsv \
-  --config configs/paths.yaml \
-  --model generic_cpsam \
-  --split test \
-  --intensity_thresh 0.05 0.95 \
-  --min_area 80
-
-run_if_missing \
-  data/reports/e3_gating_generic_cpsam_test_q2_98_a60.tsv \
-  --config configs/paths.yaml \
-  --model generic_cpsam \
-  --split test \
-  --intensity_thresh 0.02 0.98 \
-  --min_area 60
+if [ -f data/reports/e3_gating_test_final_generic_cpsam.tsv ]; then
+  echo "[skip] exists: data/reports/e3_gating_test_final_generic_cpsam.tsv"
+else
+  mamba run -n finetune python scripts/run_e3_val_select_test.py \
+    --config configs/paths.yaml \
+    --model generic_cpsam \
+    --q-low 0.0 0.02 0.05 \
+    --q-high 1.0 0.98 0.95 \
+    --min-area 50 60 80
+fi

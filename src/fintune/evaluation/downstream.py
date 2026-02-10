@@ -74,17 +74,22 @@ def _aggregate_donor_from_tiles(tile_rows: List[Dict[str, str]]):
         marker = str(r.get("marker", "")).strip().lower()
         n_total = _safe_float(r.get("n_total_cells"))
         n_pos = _safe_float(r.get("n_marker_positive"))
-        if model == "" or donor == "" or marker == "" or n_total is None or n_pos is None or n_total <= 0:
+        area = _safe_float(r.get("area_px"))
+        if model == "" or donor == "" or marker == "" or n_total is None or n_pos is None:
             continue
         key = (model, donor, marker)
         if key not in agg:
-            agg[key] = {"n_total_cells": 0.0, "n_marker_positive": 0.0}
+            agg[key] = {"n_total_cells": 0.0, "n_marker_positive": 0.0, "area_px": 0.0}
         agg[key]["n_total_cells"] += n_total
         agg[key]["n_marker_positive"] += n_pos
+        if area is not None and area > 0:
+            agg[key]["area_px"] += area
 
     out = []
     for (model, donor, marker), v in agg.items():
         ratio = v["n_marker_positive"] / v["n_total_cells"] if v["n_total_cells"] > 0 else 0.0
+        total_density_mpx = (v["n_total_cells"] / v["area_px"]) * 1e6 if v["area_px"] > 0 else None
+        pos_density_mpx = (v["n_marker_positive"] / v["area_px"]) * 1e6 if v["area_px"] > 0 else None
         out.append(
             {
                 "model": model,
@@ -92,16 +97,19 @@ def _aggregate_donor_from_tiles(tile_rows: List[Dict[str, str]]):
                 "marker": marker,
                 "n_total_cells": int(v["n_total_cells"]),
                 "n_marker_positive": int(v["n_marker_positive"]),
+                "area_px": int(v["area_px"]) if v["area_px"] > 0 else 0,
+                "total_density_mpx": total_density_mpx,
+                "pos_density_mpx": pos_density_mpx,
                 "ratio": ratio,
             }
         )
     return out
 
 
-def _correlate(donor_rows, outcome: str):
+def _correlate(donor_rows, outcome: str, metric: str):
     x, y = [], []
     for r in donor_rows:
-        ratio = _safe_float(r.get("ratio"))
+        ratio = _safe_float(r.get(metric))
         o = _safe_float(r.get(outcome))
         if ratio is None or o is None:
             continue
@@ -113,16 +121,24 @@ def _correlate(donor_rows, outcome: str):
     return {"n": len(x), "rho": float(rho), "pval": float(p)}
 
 
-def _bootstrap_tile_stability(tile_rows, clinical_by_donor, outcome: str, n_bootstrap: int, seed: int):
-    # Tile-level bootstrap: resample 80% tiles per donor, then compute donor ratio -> Spearman.
+def _bootstrap_tile_stability(
+    tile_rows,
+    clinical_by_donor,
+    outcome: str,
+    metric: str,
+    n_bootstrap: int,
+    seed: int,
+):
+    # Tile-level bootstrap: resample 80% tiles per donor, then compute donor metric -> Spearman.
     by_donor = {}
     for r in tile_rows:
         donor = _norm_id(r.get("donor", ""))
         n_total = _safe_float(r.get("n_total_cells"))
         n_pos = _safe_float(r.get("n_marker_positive"))
-        if donor == "" or n_total is None or n_pos is None or n_total <= 0:
+        area = _safe_float(r.get("area_px"))
+        if donor == "" or n_total is None or n_pos is None:
             continue
-        by_donor.setdefault(donor, []).append((n_pos, n_total))
+        by_donor.setdefault(donor, []).append((n_pos, n_total, area))
 
     rng = random.Random(seed)
     rhos = []
@@ -136,12 +152,23 @@ def _bootstrap_tile_stability(tile_rows, clinical_by_donor, outcome: str, n_boot
             idxs = [rng.randrange(0, len(tiles)) for _ in range(k)]
             pos = sum(tiles[i][0] for i in idxs)
             total = sum(tiles[i][1] for i in idxs)
-            if total <= 0:
+            area = sum((tiles[i][2] or 0.0) for i in idxs)
+            if total <= 0 and metric == "ratio":
+                continue
+            if metric in {"pos_density_mpx", "total_density_mpx"} and area <= 0:
                 continue
             o = _safe_float(clinical_by_donor[donor].get(outcome))
             if o is None:
                 continue
-            donor_ratio.append((pos / total, o))
+            if metric == "ratio":
+                val = pos / total
+            elif metric == "pos_density_mpx":
+                val = (pos / area) * 1e6
+            elif metric == "total_density_mpx":
+                val = (total / area) * 1e6
+            else:
+                raise ValueError(f"Unknown metric: {metric}")
+            donor_ratio.append((val, o))
         if len(donor_ratio) < 3:
             continue
         x = [a for a, _ in donor_ratio]
@@ -171,6 +198,7 @@ def run_downstream_analysis(
     baseline_tile_csv: str | None = None,
     finetuned_tile_csv: str | None = None,
     clinical_csv: str | None = None,
+    metrics: list[str] | None = None,
     seed: int = 2024,
 ):
     del pred_dir  # compatibility
@@ -204,15 +232,32 @@ def run_downstream_analysis(
     _, b_tile_rows = _read_table(baseline_path)
     _, f_tile_rows = _read_table(finetuned_path)
     donor_rows = _aggregate_donor_from_tiles(b_tile_rows) + _aggregate_donor_from_tiles(f_tile_rows)
+    donors_in_tiles = sorted(
+        set(_norm_id(r.get("donor", "")) for r in (b_tile_rows + f_tile_rows) if _norm_id(r.get("donor", "")) != "")
+    )
+    donors_in_clin = sorted(set(clinical_by_donor.keys()))
+    donors_not_in_clin = sorted(set(donors_in_tiles) - set(donors_in_clin))
+    clin_not_in_tiles = sorted(set(donors_in_clin) - set(donors_in_tiles))
 
     donor_out = downstream_dir / "e5_donor_marker_ratio_from_tiles.tsv"
     with open(donor_out, "w", newline="") as f:
-        fields = ["model", "donor", "marker", "n_total_cells", "n_marker_positive", "ratio"]
+        fields = [
+            "model",
+            "donor",
+            "marker",
+            "n_total_cells",
+            "n_marker_positive",
+            "area_px",
+            "total_density_mpx",
+            "pos_density_mpx",
+            "ratio",
+        ]
         w = csv.DictWriter(f, fieldnames=fields, delimiter="\t")
         w.writeheader()
         w.writerows(donor_rows)
 
     outcomes = [o for o in OUTCOMES_DEFAULT if o in c_cols]
+    metric_list = metrics or ["ratio", "pos_density_mpx", "total_density_mpx"]
     corr_rows = []
     boot_rows = []
     for model in ["baseline", "finetuned"]:
@@ -224,35 +269,39 @@ def run_downstream_analysis(
                 if d in clinical_by_donor:
                     merged.append({**r, **clinical_by_donor[d]})
             tm = [r for r in (b_tile_rows if model == "baseline" else f_tile_rows) if str(r.get("marker", "")).lower() == marker]
-            for out in outcomes:
-                cor = _correlate(merged, outcome=out)
-                corr_rows.append(
-                    {
-                        "model": model,
-                        "marker": marker,
-                        "outcome": out,
-                        "n": cor["n"],
-                        "rho": cor["rho"],
-                        "pval": cor["pval"],
-                    }
-                )
-                bs = _bootstrap_tile_stability(
-                    tile_rows=tm,
-                    clinical_by_donor=clinical_by_donor,
-                    outcome=out,
-                    n_bootstrap=n_bootstrap,
-                    seed=seed,
-                )
-                boot_rows.append(
-                    {
-                        "model": model,
-                        "marker": marker,
-                        "outcome": out,
-                        "var_rho": bs["var_rho"],
-                        "sign_consistency": bs["sign_consistency"],
-                        "p_pass": bs["p_pass"],
-                    }
-                )
+            for metric in metric_list:
+                for out in outcomes:
+                    cor = _correlate(merged, outcome=out, metric=metric)
+                    corr_rows.append(
+                        {
+                            "model": model,
+                            "marker": marker,
+                            "metric": metric,
+                            "outcome": out,
+                            "n": cor["n"],
+                            "rho": cor["rho"],
+                            "pval": cor["pval"],
+                        }
+                    )
+                    bs = _bootstrap_tile_stability(
+                        tile_rows=tm,
+                        clinical_by_donor=clinical_by_donor,
+                        outcome=out,
+                        metric=metric,
+                        n_bootstrap=n_bootstrap,
+                        seed=seed,
+                    )
+                    boot_rows.append(
+                        {
+                            "model": model,
+                            "marker": marker,
+                            "metric": metric,
+                            "outcome": out,
+                            "var_rho": bs["var_rho"],
+                            "sign_consistency": bs["sign_consistency"],
+                            "p_pass": bs["p_pass"],
+                        }
+                    )
 
     idx = [i for i, r in enumerate(corr_rows) if r["pval"] is not None]
     pvals = [corr_rows[i]["pval"] for i in idx]
@@ -267,14 +316,14 @@ def run_downstream_analysis(
 
     corr_out = downstream_dir / "e5_spearman.tsv"
     with open(corr_out, "w", newline="") as f:
-        fields = ["model", "marker", "outcome", "n", "rho", "pval", "fdr", "pass_fdr"]
+        fields = ["model", "marker", "metric", "outcome", "n", "rho", "pval", "fdr", "pass_fdr"]
         w = csv.DictWriter(f, fieldnames=fields, delimiter="\t")
         w.writeheader()
         w.writerows(corr_rows)
 
     boot_out = downstream_dir / "e5_bootstrap_stability.tsv"
     with open(boot_out, "w", newline="") as f:
-        fields = ["model", "marker", "outcome", "var_rho", "sign_consistency", "p_pass"]
+        fields = ["model", "marker", "metric", "outcome", "var_rho", "sign_consistency", "p_pass"]
         w = csv.DictWriter(f, fieldnames=fields, delimiter="\t")
         w.writeheader()
         w.writerows(boot_rows)
@@ -284,6 +333,11 @@ def run_downstream_analysis(
         "finetuned_tile_csv": str(finetuned_path),
         "clinical_csv": str(clinical_path),
         "outcomes": outcomes,
+        "metrics": metric_list,
+        "n_donors_in_tiles": len(donors_in_tiles),
+        "n_donors_in_clinical": len(donors_in_clin),
+        "donors_not_in_clinical": donors_not_in_clin,
+        "clinical_donors_missing_tiles": clin_not_in_tiles,
         "n_corr_rows": len(corr_rows),
         "n_boot_rows": len(boot_rows),
         "alpha": alpha,
@@ -303,4 +357,3 @@ def run_downstream_analysis(
 
 
 __all__ = ["run_downstream_analysis"]
-

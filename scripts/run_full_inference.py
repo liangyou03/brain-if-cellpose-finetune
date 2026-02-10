@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
-E5.1: 全数据推理（14,749 tiles）并汇总 donor-level density。
+Purpose: Run E5.1 full-tile inference for baseline vs finetuned models.
+Output: tile-level counts and donor-level density/ratio aggregation tables.
 """
 import argparse
 from fintune.inference.full_inference import run_full_inference

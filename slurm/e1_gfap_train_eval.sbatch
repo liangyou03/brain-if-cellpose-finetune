@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=e1_gfap_train_eval
 #SBATCH --cluster=gpu
-#SBATCH --partition=a100
+#SBATCH --partition=l40s
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=05:00:00
+#SBATCH --time=12:00:00
 #SBATCH -o /ix/jbwang/liangyou/fintune/data/logs/slurm/%x-%j.out
 #SBATCH -e /ix/jbwang/liangyou/fintune/data/logs/slurm/%x-%j.err
 

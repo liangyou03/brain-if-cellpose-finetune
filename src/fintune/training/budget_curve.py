@@ -59,11 +59,11 @@ def run_budget_curve(
     all_pairs = list_pairs(train_dir)
     grouped = _group_by_marker(all_pairs)
     markers = sorted(grouped.keys()) if marker == "all" else [marker.lower()]
-    rng = random.Random(seed)
-
     records = []
     for budget in budgets:
         for rep in range(repeats):
+            run_seed = int(seed + budget * 1000 + rep)
+            rng = random.Random(run_seed)
             run_id = f"b{budget}_r{rep}"
             run_dir = base_dir / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
@@ -75,6 +75,7 @@ def run_budget_curve(
                 rec = {
                     "budget": budget,
                     "repeat": rep,
+                    "seed": run_seed,
                     "train_n": len(list_pairs(run_dir / "train_subset")) if (run_dir / "train_subset").exists() else "",
                     "eval_split": eval_split,
                     "model_path": str(run_dir / "checkpoints" / model_name / "models" / model_name),
@@ -131,6 +132,7 @@ def run_budget_curve(
                 marker_filter=None if marker == "all" else marker.lower(),
                 nimg_per_epoch=local_nimg_per_epoch,
                 nimg_test_per_epoch=local_nimg_test_per_epoch,
+                seed=run_seed,
             )
 
             run_baseline_inference(
@@ -146,6 +148,7 @@ def run_budget_curve(
             rec = {
                 "budget": budget,
                 "repeat": rep,
+                "seed": run_seed,
                 "train_n": len(subset_pairs),
                 "eval_split": eval_split,
                 "model_path": str(saved_model),

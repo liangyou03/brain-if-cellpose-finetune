@@ -39,7 +39,7 @@ def run_baseline_inference(
     out_dir = Path(cfg["predictions_dir"]) / Path(model).name / split
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    model_obj = models.CellposeModel(gpu=False, pretrained_model=model)
+    model_obj = models.CellposeModel(gpu=True, pretrained_model=model)
     pairs = list_pairs(data_dir)
     if len(pairs) == 0:
         raise RuntimeError(f"No image/mask pairs found in {data_dir}")
@@ -80,7 +80,7 @@ def run_baseline_inference(
     with open(out_dir / "metrics.json", "w") as f:
         json.dump(metrics_json, f, indent=2)
 
-    print(f"[baseline] split={split}, n={len(pairs)}, model={model}, zero_dapi={zero_dapi}")
+    print(f"[baseline] split={split}, n={len(pairs)}, model={model}, zero_dapi={zero_dapi}, gpu=True")
     print(f"[baseline] outputs={out_dir}")
     print(f"[baseline] overall={metrics_json['overall']}")
 

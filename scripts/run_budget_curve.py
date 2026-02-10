@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
-E2.1: 标注预算曲线（重复抽样 fine-tune）。
+Purpose: Run E2.1 label-efficiency budget-curve experiments with repeated sampling.
+Output: per-run metrics and aggregated budget summaries.
 """
 import argparse
 from fintune.training.budget_curve import run_budget_curve

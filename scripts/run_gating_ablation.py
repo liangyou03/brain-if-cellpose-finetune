@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
-E3.1: Marker gating ablation。
+Purpose: Run E3.1 marker gating ablation with configurable intensity/area filters.
+Output: gated vs ungated metric comparisons.
 """
 import argparse
 from fintune.evaluation.gating_ablation import run_gating_ablation

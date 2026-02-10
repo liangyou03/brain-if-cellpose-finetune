@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=e1_baseline_test
+#SBATCH --job-name=e3_gating_force
 #SBATCH --cluster=gpu
 #SBATCH --partition=l40s
 #SBATCH --gres=gpu:1
@@ -12,7 +12,10 @@ set -euo pipefail
 cd /ix/jbwang/liangyou/fintune
 
 export PYTHONPATH=src
-mamba run -n finetune python scripts/run_cpsam_baseline.py \
+
+mamba run -n finetune python scripts/run_e3_val_select_test.py \
   --config configs/paths.yaml \
-  --model cpsam \
-  --split test
+  --model generic_cpsam \
+  --q-low 0.0 0.02 0.05 \
+  --q-high 1.0 0.98 0.95 \
+  --min-area 50 60 80

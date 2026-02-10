@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import random
 import yaml
 import numpy as np
 import torch
@@ -9,12 +10,21 @@ from cellpose import models, train as cp_train
 from fintune.utils.dataset import list_pairs, read_image, read_mask, parse_marker_donor
 
 
-def _load_data(dir_path: Path, marker_filter: str | None = None):
+def _load_data(
+    dir_path: Path,
+    marker_filter: str | None = None,
+    marker_include: set[str] | None = None,
+    marker_exclude: set[str] | None = None,
+):
     imgs = []
     masks = []
     for img_path, mask_path in list_pairs(dir_path):
         marker, _ = parse_marker_donor(img_path.stem)
         if marker_filter is not None and marker != marker_filter.lower():
+            continue
+        if marker_include is not None and marker not in marker_include:
+            continue
+        if marker_exclude is not None and marker in marker_exclude:
             continue
         img = read_image(img_path)
         if img.ndim == 2:
@@ -32,9 +42,12 @@ def finetune_generic(
     resume_ckpt: str | None = None,
     model_name: str = "generic_cpsam",
     marker_filter: str | None = None,
+    marker_include: list[str] | None = None,
+    marker_exclude: list[str] | None = None,
     nimg_per_epoch: int | None = None,
     nimg_test_per_epoch: int | None = None,
     zero_dapi: bool = False,
+    seed: int = 2024,
 ):
     with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
@@ -44,8 +57,30 @@ def finetune_generic(
     ckpt_dir = Path(cfg["checkpoints_dir"]) / model_name
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-    train_imgs, train_masks = _load_data(train_dir, marker_filter)
-    val_imgs, val_masks = _load_data(val_dir, marker_filter)
+    include_set = set([m.lower() for m in marker_include]) if marker_include is not None else None
+    exclude_set = set([m.lower() for m in marker_exclude]) if marker_exclude is not None else None
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    train_imgs, train_masks = _load_data(
+        train_dir,
+        marker_filter=marker_filter,
+        marker_include=include_set,
+        marker_exclude=exclude_set,
+    )
+    val_imgs, val_masks = _load_data(
+        val_dir,
+        marker_filter=marker_filter,
+        marker_include=include_set,
+        marker_exclude=exclude_set,
+    )
     if zero_dapi:
         for img in train_imgs:
             if img.ndim == 3 and img.shape[-1] >= 1:
@@ -59,8 +94,7 @@ def finetune_generic(
         raise RuntimeError(f"No validation pairs found in {val_dir} for marker={marker_filter}")
 
     pretrained = resume_ckpt if resume_ckpt else "cpsam"
-    use_gpu = bool(torch.cuda.is_available())
-    model_obj = models.CellposeModel(gpu=use_gpu, pretrained_model=pretrained)
+    model_obj = models.CellposeModel(gpu=True, pretrained_model=pretrained)
 
     model_path = cp_train.train_seg(
         model_obj.net,
@@ -87,7 +121,7 @@ def finetune_generic(
         saved = model_path
 
     print(
-        f"[finetune] model_name={model_name}, train_n={len(train_imgs)}, val_n={len(val_imgs)}, zero_dapi={zero_dapi}"
+        f"[finetune] model_name={model_name}, train_n={len(train_imgs)}, val_n={len(val_imgs)}, zero_dapi={zero_dapi}, seed={seed}"
     )
     print(f"[finetune] saved={saved}")
     return saved

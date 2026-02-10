@@ -44,7 +44,7 @@ def _pps_to_flow_threshold(pps: int) -> float:
 
 def _run_cpsam_proxy(sampled_pairs, pps: int):
     flow_threshold = _pps_to_flow_threshold(pps)
-    model_obj = models.CellposeModel(gpu=False, pretrained_model="cpsam")
+    model_obj = models.CellposeModel(gpu=True, pretrained_model="cpsam")
     true_all, pred_all = [], []
     true_by_marker, pred_by_marker = {}, {}
     for img_path, mask_path in sampled_pairs:
@@ -68,6 +68,7 @@ def _run_cpsam_proxy(sampled_pairs, pps: int):
     out = {
         "method": "cpsam_proxy",
         "pps": int(pps),
+        "gpu": True,
         "flow_threshold": float(flow_threshold),
         "overall": summarize_metrics(true_all, pred_all),
         "markers": {},
@@ -116,8 +117,9 @@ def run_microsam_sweep(
             {
                 "method": r["method"],
                 "pps": r["pps"],
-                "flow_threshold": r["flow_threshold"],
-                "group": "overall",
+                    "flow_threshold": r["flow_threshold"],
+                    "gpu": r["gpu"],
+                    "group": "overall",
                 "ap50": ov["ap50"],
                 "precision": ov["precision"],
                 "recall": ov["recall"],
@@ -133,6 +135,7 @@ def run_microsam_sweep(
                     "method": r["method"],
                     "pps": r["pps"],
                     "flow_threshold": r["flow_threshold"],
+                    "gpu": r["gpu"],
                     "group": marker,
                     "ap50": met["ap50"],
                     "precision": met["precision"],

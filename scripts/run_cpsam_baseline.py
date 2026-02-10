@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-E1.1: off-the-shelf Cellpose-SAM 推理。
-在 Test 集上输出 AP@0.5 / Precision / Recall / F1 并保存预测 mask。
+Purpose: Run E1.1 off-the-shelf Cellpose-SAM baseline inference.
+Output: prediction masks and test metrics (AP50/Precision/Recall/F1).
 """
 import argparse
 from fintune.inference.cpsam_baseline import run_baseline_inference

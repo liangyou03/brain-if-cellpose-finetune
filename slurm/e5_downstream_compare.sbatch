@@ -13,11 +13,17 @@ cd /ix/jbwang/liangyou/fintune
 
 export PYTHONPATH=src
 mkdir -p data/downstream/full_inference
+rm -rf data/downstream/full_inference/baseline
+rm -rf data/downstream/full_inference/finetuned
+rm -f data/downstream/full_inference/tile_counts_all.tsv
+rm -f data/downstream/full_inference/donor_marker_ratio.tsv
+rm -f data/downstream/full_inference/summary.json
 
 mamba run -n finetune python scripts/run_full_inference.py \
   --config configs/paths.yaml \
   --baseline-model cpsam \
-  --finetuned-model generic_cpsam
+  --finetuned-model generic_cpsam \
+  --no-resume
 
 mamba run -n finetune python scripts/analyze_downstream.py \
   --config configs/paths.yaml \
@@ -25,4 +31,5 @@ mamba run -n finetune python scripts/analyze_downstream.py \
   --bootstrap 200 \
   --alpha 0.05 \
   --clinical-csv data/ROSMAP_clinical_n69.csv \
+  --metrics ratio pos_density_mpx total_density_mpx \
   --seed 2024

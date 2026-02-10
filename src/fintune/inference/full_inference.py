@@ -20,6 +20,15 @@ from cellpose import models
 MARKERS = {"gfap", "iba1", "neun", "olig2", "pecam"}
 
 
+def _canonical_pair_key(path: Path, channel: int) -> str | None:
+    name = path.name
+    pat = re.compile(rf"(?:_[A-Za-z0-9]+-)?b0c{channel}", flags=re.IGNORECASE)
+    if pat.search(name) is None:
+        return None
+    core = pat.sub("_CHAN", name, count=1).lower()
+    return f"{str(path.parent).lower()}::{core}"
+
+
 def _load_yaml(path: Path):
     with open(path, "r") as f:
         return yaml.safe_load(f)
@@ -32,17 +41,35 @@ def _ensure_local_path(p: Path, repo_root: Path):
 
 
 def _discover_tiles(raw_tiles_dir: Path, max_tiles: int | None = None):
-    # Use channel-split tiles in `*.tiff_files`: c0 (DAPI), c1 (marker).
-    c0_files = sorted(raw_tiles_dir.rglob("*_b0c0x*.tif*"))
+    # Support both patterns:
+    # 1) ..._b0c0... + ..._b0c1...
+    # 2) ..._dapi-b0c0... + ..._<marker>-b0c1...
+    tif_files = [p for p in raw_tiles_dir.rglob("*.tif*") if p.suffix.lower() in {".tif", ".tiff"}]
+    c1_by_key = {}
+    c2_by_key = {}
+    c0_files = []
+    for p in tif_files:
+        k1 = _canonical_pair_key(p, channel=1)
+        if k1 is not None:
+            c1_by_key[k1] = p
+        k2 = _canonical_pair_key(p, channel=2)
+        if k2 is not None:
+            c2_by_key[k2] = p
+        k0 = _canonical_pair_key(p, channel=0)
+        if k0 is not None:
+            c0_files.append(p)
+
     pairs = []
-    for c0 in c0_files:
-        if c0.suffix.lower() not in {".tif", ".tiff"}:
+    for c0 in sorted(c0_files):
+        k0 = _canonical_pair_key(c0, channel=0)
+        if k0 is None:
             continue
-        c1 = Path(str(c0).replace("b0c0", "b0c1"))
-        if c1.exists():
-            if c1.suffix.lower() not in {".tif", ".tiff"}:
-                continue
-            pairs.append((c0, c1))
+        c1 = c1_by_key.get(k0)
+        if c1 is None:
+            c1 = c2_by_key.get(k0)
+        if c1 is None:
+            continue
+        pairs.append((c0, c1))
         if max_tiles is not None and len(pairs) >= max_tiles:
             break
     return pairs
@@ -58,9 +85,9 @@ def _infer_marker_and_donor(path: Path) -> Tuple[str, str]:
 
     donor = "unknown"
     for p in path.parts:
-        m = re.fullmatch(r"\d{6,12}", p)
+        m = re.search(r"(\d{6,12})", p)
         if m:
-            donor = p
+            donor = m.group(1)
             break
     return marker, donor
 
@@ -115,11 +142,26 @@ def _run_model(
     if resume and tile_tsv.exists():
         with open(tile_tsv, "r", newline="") as f:
             rr = csv.DictReader(f, delimiter="\t")
-            for r in rr:
-                done.add(r["tile_key"])
-                rows.append(r)
+            required_fields = {
+                "tile_key",
+                "model",
+                "donor",
+                "marker",
+                "n_total_cells",
+                "n_marker_positive",
+                "area_px",
+                "total_density_mpx",
+                "pos_density_mpx",
+                "ratio",
+            }
+            if rr.fieldnames is None or not required_fields.issubset(set(rr.fieldnames)):
+                print(f"[full_inference] resume disabled for {tile_tsv} due to legacy schema")
+            else:
+                for r in rr:
+                    done.add(r["tile_key"])
+                    rows.append(r)
 
-    model_obj = models.CellposeModel(gpu=False, pretrained_model=model_spec)
+    model_obj = models.CellposeModel(gpu=True, pretrained_model=model_spec)
     for c0, c1 in tile_pairs:
         tile_key = str(c0)
         if tile_key in done:
@@ -138,7 +180,10 @@ def _run_model(
             cellprob_threshold=cellprob_threshold,
         )
         pred = pred.astype(np.int32)
+        area_px = int(img.shape[0] * img.shape[1])
         n_total, n_pos, ratio = _count_positive(pred, img[..., 1])
+        total_density_mpx = (float(n_total) / float(area_px)) * 1e6 if area_px > 0 else 0.0
+        pos_density_mpx = (float(n_pos) / float(area_px)) * 1e6 if area_px > 0 else 0.0
 
         if save_masks:
             safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{donor}_{marker}_{c0.stem}_pred.tif")
@@ -153,6 +198,9 @@ def _run_model(
             "marker": marker,
             "n_total_cells": int(n_total),
             "n_marker_positive": int(n_pos),
+            "area_px": area_px,
+            "total_density_mpx": total_density_mpx,
+            "pos_density_mpx": pos_density_mpx,
             "ratio": float(ratio),
         }
         rows.append(row)
@@ -166,6 +214,9 @@ def _run_model(
         "marker",
         "n_total_cells",
         "n_marker_positive",
+        "area_px",
+        "total_density_mpx",
+        "pos_density_mpx",
         "ratio",
     ]
     with open(tile_tsv, "w", newline="") as f:
@@ -184,15 +235,19 @@ def _aggregate_donor(rows: List[Dict]):
             continue
         key = (str(r["model"]), donor, marker)
         if key not in agg:
-            agg[key] = {"n_total_cells": 0, "n_marker_positive": 0}
+            agg[key] = {"n_total_cells": 0, "n_marker_positive": 0, "area_px": 0}
         agg[key]["n_total_cells"] += int(r["n_total_cells"])
         agg[key]["n_marker_positive"] += int(r["n_marker_positive"])
+        agg[key]["area_px"] += int(r.get("area_px", 0))
 
     out = []
     for (model, donor, marker), v in agg.items():
         n_total = v["n_total_cells"]
         n_pos = v["n_marker_positive"]
+        area_px = v["area_px"]
         ratio = (n_pos / n_total) if n_total > 0 else 0.0
+        total_density_mpx = (float(n_total) / float(area_px)) * 1e6 if area_px > 0 else 0.0
+        pos_density_mpx = (float(n_pos) / float(area_px)) * 1e6 if area_px > 0 else 0.0
         out.append(
             {
                 "model": model,
@@ -200,6 +255,9 @@ def _aggregate_donor(rows: List[Dict]):
                 "marker": marker,
                 "n_total_cells": n_total,
                 "n_marker_positive": n_pos,
+                "area_px": area_px,
+                "total_density_mpx": total_density_mpx,
+                "pos_density_mpx": pos_density_mpx,
                 "ratio": ratio,
             }
         )
@@ -257,6 +315,7 @@ def run_full_inference(
     )
 
     all_rows = b_rows + f_rows
+    n_unknown = sum(1 for r in all_rows if str(r.get("donor", "")) == "unknown")
     all_tile_tsv = downstream_dir / "tile_counts_all.tsv"
     with open(all_tile_tsv, "w", newline="") as f:
         fields = list(all_rows[0].keys()) if len(all_rows) > 0 else [
@@ -268,6 +327,9 @@ def run_full_inference(
             "marker",
             "n_total_cells",
             "n_marker_positive",
+            "area_px",
+            "total_density_mpx",
+            "pos_density_mpx",
             "ratio",
         ]
         w = csv.DictWriter(f, fieldnames=fields, delimiter="\t")
@@ -284,6 +346,9 @@ def run_full_inference(
             "marker",
             "n_total_cells",
             "n_marker_positive",
+            "area_px",
+            "total_density_mpx",
+            "pos_density_mpx",
             "ratio",
         ]
         w = csv.DictWriter(f, fieldnames=fields, delimiter="\t")
@@ -293,6 +358,9 @@ def run_full_inference(
     summary = {
         "raw_tiles_dir": str(raw_tiles_dir),
         "n_tile_pairs": len(tile_pairs),
+        "n_marker_from_c2_fallback": int(sum(1 for _, c1 in tile_pairs if "b0c2" in c1.name.lower())),
+        "n_rows_total": len(all_rows),
+        "n_rows_unknown_donor": n_unknown,
         "baseline_model": baseline_model,
         "finetuned_model": finetuned_spec,
         "outputs": {
@@ -306,6 +374,7 @@ def run_full_inference(
         json.dump(summary, f, indent=2)
 
     print(f"[full_inference] n_tile_pairs={len(tile_pairs)}")
+    print("[full_inference] gpu=True")
     print(f"[full_inference] baseline={b_tsv}")
     print(f"[full_inference] finetuned={f_tsv}")
     print(f"[full_inference] donor={donor_tsv}")

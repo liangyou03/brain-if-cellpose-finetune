@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
-E4.1: micro-sam / μSAM prompt sweep（可选）。
+Purpose: Run E4.1 micro-sam prompt sweep on sampled tiles.
+Output: prompt-setting comparison metrics and summary tables.
 """
 import argparse
 from fintune.inference.microsam_sweep import run_microsam_sweep

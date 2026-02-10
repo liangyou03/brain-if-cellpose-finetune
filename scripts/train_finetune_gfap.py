@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
-E1.3: GFAP 专用 fine-tune（复杂形态细胞）。
+Purpose: Train E1.3 GFAP-specific finetune model.
+Output: GFAP-focused checkpoint for marker-specific evaluation.
 """
 import argparse
 from fintune.training.finetune_gfap import finetune_gfap

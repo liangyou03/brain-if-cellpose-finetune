@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
-E0.1/E0.2: donor-level split + 转换为 Cellpose 3 通道 (DAPI, marker, zeros)。
-输入：configs/paths.yaml，原始 tiff/marker/npy。
-输出：train_cells/, val_cells/, test_cells/ 下成对命名的图像与实例 mask。
+Purpose: Prepare E0.1/E0.2 donor-level split and convert data to Cellpose 3-channel format.
+Input: raw IF images/masks from paths in configs/paths.yaml.
+Output: paired image/mask files in train_cells/, val_cells/, and test_cells/.
 """
 import argparse
 from fintune.data_prep.prepare_cellpose_data import prepare_cellpose_dataset
