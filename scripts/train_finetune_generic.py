@@ -15,6 +15,9 @@ def parse_args():
     ap.add_argument("--checkpoint", default=None, help="继续训练的 ckpt")
     ap.add_argument("--nimg-per-epoch", type=int, default=None)
     ap.add_argument("--nimg-test-per-epoch", type=int, default=None)
+    ap.add_argument("--model-name", default="generic_cpsam")
+    ap.add_argument("--marker-filter", default=None, help="only train one marker, e.g. gfap")
+    ap.add_argument("--zero-dapi", action="store_true", help="set DAPI channel to zero during training")
     return ap.parse_args()
 
 
@@ -26,8 +29,11 @@ def main():
         lr=args.lr,
         batch_size=args.batch,
         resume_ckpt=args.checkpoint,
+        model_name=args.model_name,
+        marker_filter=args.marker_filter,
         nimg_per_epoch=args.nimg_per_epoch,
         nimg_test_per_epoch=args.nimg_test_per_epoch,
+        zero_dapi=args.zero_dapi,
     )
 
 

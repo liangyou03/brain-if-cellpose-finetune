@@ -34,6 +34,7 @@ def finetune_generic(
     marker_filter: str | None = None,
     nimg_per_epoch: int | None = None,
     nimg_test_per_epoch: int | None = None,
+    zero_dapi: bool = False,
 ):
     with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
@@ -45,6 +46,13 @@ def finetune_generic(
 
     train_imgs, train_masks = _load_data(train_dir, marker_filter)
     val_imgs, val_masks = _load_data(val_dir, marker_filter)
+    if zero_dapi:
+        for img in train_imgs:
+            if img.ndim == 3 and img.shape[-1] >= 1:
+                img[..., 0] = 0
+        for img in val_imgs:
+            if img.ndim == 3 and img.shape[-1] >= 1:
+                img[..., 0] = 0
     if len(train_imgs) == 0:
         raise RuntimeError(f"No training pairs found in {train_dir} for marker={marker_filter}")
     if len(val_imgs) == 0:
@@ -78,7 +86,9 @@ def finetune_generic(
     else:
         saved = model_path
 
-    print(f"[finetune] model_name={model_name}, train_n={len(train_imgs)}, val_n={len(val_imgs)}")
+    print(
+        f"[finetune] model_name={model_name}, train_n={len(train_imgs)}, val_n={len(val_imgs)}, zero_dapi={zero_dapi}"
+    )
     print(f"[finetune] saved={saved}")
     return saved
 

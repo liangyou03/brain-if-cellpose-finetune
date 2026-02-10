@@ -20,6 +20,7 @@ def run_baseline_inference(
     split: str = "test",
     flow_threshold: float = 0.4,
     cellprob_threshold: float = 0.0,
+    zero_dapi: bool = False,
 ):
     del save_vis  # not used in this minimal runner
 
@@ -52,6 +53,9 @@ def run_baseline_inference(
         img = read_image(img_path)
         if img.ndim == 2:
             img = np.stack([img, img, np.zeros_like(img)], axis=-1)
+        if zero_dapi and img.ndim == 3 and img.shape[-1] >= 1:
+            img = img.copy()
+            img[..., 0] = 0
         pred, _, _ = model_obj.eval(
             img,
             channels=list(chan),
@@ -76,7 +80,7 @@ def run_baseline_inference(
     with open(out_dir / "metrics.json", "w") as f:
         json.dump(metrics_json, f, indent=2)
 
-    print(f"[baseline] split={split}, n={len(pairs)}, model={model}")
+    print(f"[baseline] split={split}, n={len(pairs)}, model={model}, zero_dapi={zero_dapi}")
     print(f"[baseline] outputs={out_dir}")
     print(f"[baseline] overall={metrics_json['overall']}")
 

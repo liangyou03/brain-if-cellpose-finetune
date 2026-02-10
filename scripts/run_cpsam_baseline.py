@@ -16,6 +16,7 @@ def parse_args():
     ap.add_argument("--split", choices=["train", "val", "test"], default="test")
     ap.add_argument("--flow-threshold", type=float, default=0.4)
     ap.add_argument("--cellprob-threshold", type=float, default=0.0)
+    ap.add_argument("--zero-dapi", action="store_true", help="set DAPI channel to zero during inference")
     ap.add_argument("--save-vis", action="store_true", help="保存可视化 png")
     return ap.parse_args()
 
@@ -31,6 +32,7 @@ def main():
         split=args.split,
         flow_threshold=args.flow_threshold,
         cellprob_threshold=args.cellprob_threshold,
+        zero_dapi=args.zero_dapi,
     )
 
 
