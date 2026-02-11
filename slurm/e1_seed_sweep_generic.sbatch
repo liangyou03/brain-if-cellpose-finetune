@@ -14,7 +14,7 @@ cd /ix/jbwang/liangyou/fintune
 export PYTHONPATH=src
 mamba run -n finetune python scripts/run_e1_seed_sweep_generic.py \
   --config configs/paths.yaml \
-  --seeds 2024 2025 2026 \
+  --seeds 2024 2025 2026 2027 2028 \
   --epochs 80 \
   --lr 1e-4 \
   --batch 2 \

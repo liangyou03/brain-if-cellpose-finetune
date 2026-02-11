@@ -10,7 +10,7 @@ from fintune.training.budget_curve import run_budget_curve
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/paths.yaml")
-    ap.add_argument("--budgets", nargs="+", type=int, default=[2, 5, 10, 20, 30])
+    ap.add_argument("--budgets", nargs="+", type=int, default=[2, 5, 10, 15, 17, 19])
     ap.add_argument("--repeats", type=int, default=5)
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--lr", type=float, default=1e-4)

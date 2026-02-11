@@ -34,10 +34,17 @@ def _load_yaml(path: Path):
         return yaml.safe_load(f)
 
 
-def _ensure_local_path(p: Path, repo_root: Path):
+def _ensure_local_path(p: Path, repo_root: Path) -> Path:
     # Must be configured via paths under this repo. Symlinks are allowed.
-    if not str(p).startswith(str(repo_root)):
+    root = repo_root.resolve()
+    rp = p.expanduser()
+    rp = (root / rp) if not rp.is_absolute() else rp
+    rp = Path(str(rp))
+    root_s = str(root)
+    rp_s = str(rp)
+    if not (rp_s == root_s or rp_s.startswith(root_s + "/")):
         raise ValueError(f"Path must be under repository root: {p}")
+    return rp
 
 
 def _discover_tiles(raw_tiles_dir: Path, max_tiles: int | None = None):
@@ -276,12 +283,9 @@ def run_full_inference(
 ):
     cfg = _load_yaml(Path(config_path))
     repo_root = Path(config_path).resolve().parents[1]
-    raw_tiles_dir = Path(cfg["raw_tiles_dir"])
-    downstream_dir = Path(cfg["downstream_dir"]) / "full_inference"
+    raw_tiles_dir = _ensure_local_path(Path(cfg["raw_tiles_dir"]), repo_root)
+    downstream_dir = _ensure_local_path(Path(cfg["downstream_dir"]), repo_root) / "full_inference"
     downstream_dir.mkdir(parents=True, exist_ok=True)
-
-    _ensure_local_path(raw_tiles_dir, repo_root)
-    _ensure_local_path(downstream_dir, repo_root)
 
     tile_pairs = _discover_tiles(raw_tiles_dir, max_tiles=max_tiles)
     if len(tile_pairs) == 0:

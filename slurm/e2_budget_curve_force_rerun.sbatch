@@ -14,7 +14,7 @@ cd /ix/jbwang/liangyou/fintune
 export PYTHONPATH=src
 mamba run -n finetune python scripts/run_budget_curve.py \
   --config configs/paths.yaml \
-  --budgets 2 5 10 20 30 \
+  --budgets 2 5 10 15 17 19 \
   --repeats 5 \
   --epochs 6 \
   --batch 2 \

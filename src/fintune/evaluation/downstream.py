@@ -61,9 +61,16 @@ def _fdr_bh(pvals: List[float]) -> List[float]:
     return out
 
 
-def _ensure_local_path(p: Path, repo_root: Path):
-    if not str(p).startswith(str(repo_root)):
+def _ensure_local_path(p: Path, repo_root: Path) -> Path:
+    root = repo_root.resolve()
+    rp = p.expanduser()
+    rp = (root / rp) if not rp.is_absolute() else rp
+    rp = Path(str(rp))
+    root_s = str(root)
+    rp_s = str(rp)
+    if not (rp_s == root_s or rp_s.startswith(root_s + "/")):
         raise ValueError(f"Path must be under repository root: {p}")
+    return rp
 
 
 def _aggregate_donor_from_tiles(tile_rows: List[Dict[str, str]]):
@@ -205,9 +212,8 @@ def run_downstream_analysis(
 
     cfg = yaml.safe_load(Path(config_path).read_text())
     repo_root = Path(config_path).resolve().parents[1]
-    downstream_dir = Path(cfg["downstream_dir"])
+    downstream_dir = _ensure_local_path(Path(cfg["downstream_dir"]), repo_root)
     downstream_dir.mkdir(parents=True, exist_ok=True)
-    _ensure_local_path(downstream_dir, repo_root)
 
     fi_dir = downstream_dir / "full_inference"
     if baseline_tile_csv is None:
@@ -217,11 +223,10 @@ def run_downstream_analysis(
     if clinical_csv is None:
         clinical_csv = str(Path(cfg["data_root"]) / "ROSMAP_clinical_n69.csv")
 
-    baseline_path = Path(baseline_tile_csv)
-    finetuned_path = Path(finetuned_tile_csv)
-    clinical_path = Path(clinical_csv)
+    baseline_path = _ensure_local_path(Path(baseline_tile_csv), repo_root)
+    finetuned_path = _ensure_local_path(Path(finetuned_tile_csv), repo_root)
+    clinical_path = _ensure_local_path(Path(clinical_csv), repo_root)
     for p in [baseline_path, finetuned_path, clinical_path]:
-        _ensure_local_path(p, repo_root)
         if not p.exists():
             raise FileNotFoundError(f"Missing required file: {p}")
 
